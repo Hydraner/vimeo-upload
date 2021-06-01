@@ -198,6 +198,7 @@
         xhr.open(this.httpMethod, this.url, true)
         xhr.setRequestHeader('Authorization', 'Bearer ' + this.token)
         xhr.setRequestHeader('Content-Type', 'application/json')
+        xhr.setRequestHeader('Accept', 'application/vnd.vimeo.*+json;version=3.2')
 
         xhr.onload = function(e) {
             // get vimeo upload  url, user (for available quote), ticket id and complete url

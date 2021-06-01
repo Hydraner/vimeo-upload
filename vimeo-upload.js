@@ -110,6 +110,7 @@
         api_url: 'https://api.vimeo.com',
         name: 'Default name',
         description: 'Default description',
+        privacy: 'anybody',
         contentType: 'application/octet-stream',
         token: null,
         file: {},
@@ -165,7 +166,7 @@
         this.videoData = {
             name: (opts.name > '') ? opts.name : defaults.name,
             description: (opts.description > '') ? opts.description : defaults.description,
-            'privacy.view': opts.private ? 'nobody' : 'anybody'
+            'privacy.view': (opts.privacy > '') ? opts.privacy : defaults.privacy
         }
 
         if (!(this.url = opts.url)) {

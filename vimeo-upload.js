@@ -2,11 +2,11 @@
  | Vimeo-Upload: Upload videos to your Vimeo account directly from a
  |               browser or a Node.js app
  |
- |  ╭───╮╭─╮  
- |  │   ││ │╭─╮╭──┬──┬─╮╭───╮╭───╮   
+ |  ╭───╮╭─╮
+ |  │   ││ │╭─╮╭──┬──┬─╮╭───╮╭───╮
  |  │   ││ │├─┤│ ╭╮ ╭╮ ││ ─ ││╭╮ │  ╭────────┬─────────────────────╮
- |  ╰╮  ╰╯╭╯│ ││ ││ ││ ││  ─┤│╰╯ │  | UPLOAD │ ▒▒▒▒▒▒▒▒▒▒▒░░░░ %75 | 
- |   ╰────╯ ╰─╯╰─╯╰─╯╰─╯╰───╯╰───╯  ╰────────┴─────────────────────╯                    
+ |  ╰╮  ╰╯╭╯│ ││ ││ ││ ││  ─┤│╰╯ │  | UPLOAD │ ▒▒▒▒▒▒▒▒▒▒▒░░░░ %75 |
+ |   ╰────╯ ╰─╯╰─╯╰─╯╰─╯╰───╯╰───╯  ╰────────┴─────────────────────╯
  |
  |
  | This project was released under Apache 2.0" license.
@@ -101,6 +101,7 @@
     - retryHandler (RetryHandler), hanlder class
     - onComplete (function), handler for onComplete event
     - onProgress (function), handler for onProgress event
+    - onTranscode (function), handler for onTranscode event
     - onError (function), handler for onError event
 
     */
@@ -116,8 +117,10 @@
         upgrade_to_1080: false,
         offset: 0,
         chunkSize: 0,
+        waitForTranscodeFinish: 2000,
         retryHandler: new RetryHandler(),
         onComplete: function() {},
+        onTranscode: function() {},
         onProgress: function() {},
         onError: function() {}
     }
@@ -145,6 +148,7 @@
      * @param {string} [options.contentType] Content-type, if overriding the type of the blob.
      * @param {object} [options.metadata] File metadata
      * @param {function} [options.onComplete] Callback for when upload is complete
+     * @param {function} [options.onTranscode] Callback for status for the transcoding status of the upload
      * @param {function} [options.onProgress] Callback for status for the in-progress upload
      * @param {function} [options.onError] Callback if upload fails
      */
@@ -238,7 +242,7 @@
         var xhr = new XMLHttpRequest()
         xhr.open('PUT', this.url, true)
         xhr.setRequestHeader('Content-Type', this.contentType)
-            // xhr.setRequestHeader('Content-Length', this.file.size)
+        // xhr.setRequestHeader('Content-Length', this.file.size)
         xhr.setRequestHeader('Content-Range', 'bytes ' + this.offset + '-' + (end - 1) + '/' + this.file.size)
 
         if (xhr.upload) {
@@ -300,7 +304,7 @@
 
                 // Example of location: ' /videos/115365719', extract the video id only
                 var video_id = location.split('/').pop()
-                    // Update the video metadata
+                // Update the video metadata
                 this.onUpdateVideoData_(video_id)
             } else {
                 this.onCompleteError_(e)
@@ -332,6 +336,26 @@
     }
 
     /**
+     * Load the video to check if transcoding is still processing.
+     *
+     * @private
+     * @param {string} [id] Video Id
+     */
+    me.prototype.checkTranscoding_ = function(video_id) {
+        var url = this.buildUrl_(video_id, [], defaults.api_url + '/videos/')
+        var httpMethod = 'GET'
+        var xhr = new XMLHttpRequest()
+
+        xhr.open(httpMethod, url, true)
+        xhr.setRequestHeader('Authorization', 'Bearer ' + this.token)
+        xhr.onload = function(e) {
+            // add the metadata
+            this.onGetMetadata_(e, video_id)
+        }.bind(this)
+        xhr.send()
+    }
+
+    /**
      * Retrieve the metadata from a successful onUpdateVideoData_ response
      * This is is useful when uploading unlisted videos as the URI has changed.
      *
@@ -347,10 +371,20 @@
             if (e.target.response) {
                 // add the returned metadata to the metadata array
                 var meta = JSON.parse(e.target.response)
-                    // get the new index of the item
+                // get the new index of the item
                 var index = this.metadata.push(meta) - 1
-                    // call the complete method
-                this.onComplete(video_id, index)
+                // call the complete method
+
+                // If configured, check if the video is finished transcoding..
+                if (this.waitForTranscodeFinish && meta.transcode.status === 'in_progress') {
+                    let self = this
+                    setTimeout(function() {
+                        self.checkTranscoding_(video_id)
+                    }, this.waitForTranscodeFinish)
+                    this.onTranscode(meta)
+                } else {
+                    this.onComplete(video_id, index)
+                }
             } else {
                 this.onCompleteError_(e)
             }
